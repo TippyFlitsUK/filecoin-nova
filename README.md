@@ -4,7 +4,7 @@ Put your website on [Filecoin Onchain Cloud](https://filecoin.cloud) in one comm
 
 Your site is stored onchain on the Filecoin network - no traditional hosting, no servers to manage.
 
-Use it as a **CLI** (`nova deploy`) or as an **MCP server** for AI-assisted deploys from Claude Desktop, Cursor, and other MCP clients.
+Use the **CLI** to deploy from your terminal, or install the **MCP server** to deploy directly from Claude Code, Claude Desktop, Cursor, Windsurf, or VS Code.
 
 ---
 
