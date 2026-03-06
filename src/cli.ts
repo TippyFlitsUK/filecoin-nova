@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { deploy } from "./deploy.js";
 import { getEnsContenthash, updateEnsContenthash } from "./ens.js";
 import { setupFilecoinPinPayments } from "./pin.js";
-import { resolveConfig } from "./config.js";
+import { resolveConfig, readCredentials, writeCredentials, credentialsPath } from "./config.js";
 import { ask, close } from "./prompt.js";
 import { c, fail, info, label, promptLabel, banner, success } from "./ui.js";
 
@@ -44,6 +44,7 @@ const HELP = `
     ${c.cyan}nova deploy${c.reset} [path] [options]        Deploy a directory or archive
     ${c.cyan}nova ens${c.reset} <cid> --ens <name>         Point ENS domain to an IPFS CID
     ${c.cyan}nova status${c.reset} [--ens <name>]          Check ENS contenthash
+    ${c.cyan}nova config${c.reset}                         Set up wallet keys and defaults
     ${c.cyan}nova help${c.reset}                           Show this help
     ${c.cyan}nova --version${c.reset}                      Show version
 
@@ -157,8 +158,8 @@ async function runDeploy(args: string[]) {
       earlyExit(1, "NOVA_PIN_KEY env var is required.");
     }
     console.log("");
-    info("NOVA_PIN_KEY not set — your Filecoin wallet key for");
-    info("deploying to Filecoin Onchain Cloud (needs USDFC).");
+    info("NOVA_PIN_KEY not set. Run 'nova config' to save your keys,");
+    info("or enter your Filecoin wallet key below (needs USDFC).");
     console.log("");
     const key = await ask(promptLabel("Filecoin wallet private key:"));
     if (!key) {
@@ -204,13 +205,13 @@ async function runDeploy(args: string[]) {
       earlyExit(1, "NOVA_ENS_KEY env var is required for ENS updates.");
     }
     console.log("");
-    info("NOVA_ENS_KEY not set — your Ethereum wallet key for");
-    info("updating your ENS domain (needs ETH for gas).");
+    info("NOVA_ENS_KEY not set. Run 'nova config' to save your keys,");
+    info("or enter your Ethereum wallet key below (needs ETH for gas).");
     console.log("");
     const key = await ask(promptLabel("Ethereum wallet private key:"));
     if (!key) {
       fail("Cannot deploy without an Ethereum wallet key.");
-      info("Set NOVA_ENS_KEY env var and try again.");
+      info("Set NOVA_ENS_KEY env var or run 'nova config'.");
       earlyExit(1, "Cannot deploy without an Ethereum wallet key.");
     }
     process.env.NOVA_ENS_KEY = key;
@@ -410,13 +411,13 @@ async function runEns(args: string[]) {
       earlyExit(1, "NOVA_ENS_KEY env var is required for ENS updates.");
     }
     console.log("");
-    info("NOVA_ENS_KEY not set — your Ethereum wallet key for");
-    info("updating your ENS domain (needs ETH for gas).");
+    info("NOVA_ENS_KEY not set. Run 'nova config' to save your keys,");
+    info("or enter your Ethereum wallet key below (needs ETH for gas).");
     console.log("");
     const key = await ask(promptLabel("Ethereum wallet private key:"));
     if (!key) {
       fail("Cannot update ENS without an Ethereum wallet key.");
-      info("Set NOVA_ENS_KEY env var and try again.");
+      info("Set NOVA_ENS_KEY env var or run 'nova config'.");
       earlyExit(1, "Cannot update ENS without an Ethereum wallet key.");
     }
     config.ensKey = key;
@@ -459,6 +460,65 @@ async function runEns(args: string[]) {
   }
 }
 
+async function runConfig() {
+  const creds = readCredentials();
+
+  console.log("");
+  console.log(`  ${c.cyan}${c.bold}Nova Config${c.reset}`);
+  console.log(`  ${c.dim}Credentials stored in ${credentialsPath()}${c.reset}`);
+  console.log("");
+  info("Press Enter to keep current value. Enter 'clear' to remove.");
+  console.log("");
+
+  const pinKey = await ask(promptLabel(`Filecoin wallet key${creds.pinKey ? ` [${c.dim}configured${c.reset}]` : ""}:`));
+  if (pinKey === "clear") {
+    delete creds.pinKey;
+  } else if (pinKey) {
+    creds.pinKey = pinKey;
+  }
+
+  const ensKey = await ask(promptLabel(`Ethereum wallet key${creds.ensKey ? ` [${c.dim}configured${c.reset}]` : ""}:`));
+  if (ensKey === "clear") {
+    delete creds.ensKey;
+  } else if (ensKey) {
+    creds.ensKey = ensKey;
+  }
+
+  const ensName = await ask(promptLabel(`Default ENS domain${creds.ensName ? ` [${creds.ensName}]` : ""}:`));
+  if (ensName === "clear") {
+    delete creds.ensName;
+  } else if (ensName) {
+    creds.ensName = ensName;
+  }
+
+  const providerId = await ask(promptLabel(`Provider ID${creds.providerId !== undefined ? ` [${creds.providerId}]` : ""}:`));
+  if (providerId === "clear") {
+    delete creds.providerId;
+  } else if (providerId) {
+    const n = Number(providerId);
+    if (isNaN(n)) {
+      fail("Invalid provider ID - must be a number.");
+      earlyExit(1, "Invalid provider ID.");
+    }
+    creds.providerId = n;
+  }
+
+  const rpcUrl = await ask(promptLabel(`Ethereum RPC URL${creds.rpcUrl ? ` [${c.dim}configured${c.reset}]` : ""}:`));
+  if (rpcUrl === "clear") {
+    delete creds.rpcUrl;
+  } else if (rpcUrl) {
+    creds.rpcUrl = rpcUrl;
+  }
+
+  close();
+
+  writeCredentials(creds);
+
+  console.log("");
+  success(`Saved to ${credentialsPath()}`);
+  console.log("");
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -483,6 +543,9 @@ async function main() {
       break;
     case "status":
       await runStatus(args);
+      break;
+    case "config":
+      await runConfig();
       break;
     default:
       fail(`Unknown command: ${command}`);

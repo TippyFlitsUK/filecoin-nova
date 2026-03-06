@@ -20,6 +20,16 @@ npm install -g filecoin-nova
 | An Ethereum wallet with ETH | Pays gas for ENS updates (optional) | Any Ethereum wallet |
 | An ENS domain (optional) | Gives your site a human-readable name | Register at [app.ens.domains](https://app.ens.domains) |
 
+## Set Up Your Keys
+
+Save your wallet keys once so you don't have to enter them each time:
+
+```bash
+nova config
+```
+
+This stores your credentials in `~/.config/filecoin-nova/credentials` with owner-only permissions (mode 600). You can also set environment variables instead - they take priority over the config file.
+
 ## Deploy Your Site
 
 The simplest way - Nova will walk you through everything:
@@ -31,7 +41,6 @@ nova deploy
 Or specify everything upfront:
 
 ```bash
-export NOVA_PIN_KEY=your-filecoin-wallet-private-key
 nova deploy ./public --ens mysite.eth
 ```
 
@@ -74,17 +83,21 @@ Check what an ENS domain currently points to.
 nova status --ens mysite.eth
 ```
 
-## Configuration
+### `nova config`
 
-Set these environment variables so you don't have to enter them each time:
+Set up or update your wallet keys and defaults.
 
 ```bash
-export NOVA_PIN_KEY=your-filecoin-wallet-private-key
-export NOVA_ENS_KEY=your-ethereum-wallet-private-key  # only if using ENS
-export NOVA_ENS_NAME=mysite.eth                       # default ENS domain
+nova config
 ```
 
-All variables:
+## Configuration
+
+Nova reads configuration from three sources (in order of priority):
+
+1. **CLI flags** (`--ens`, `--rpc-url`, etc.)
+2. **Environment variables** (`NOVA_PIN_KEY`, `NOVA_ENS_KEY`, etc.)
+3. **Credentials file** (`~/.config/filecoin-nova/credentials`)
 
 | Variable | Purpose |
 |----------|---------|
@@ -118,20 +131,17 @@ nova status --ens mysite.eth --json
 
 ## MCP Server
 
-Nova includes an MCP server for AI-assisted deploys. No global install needed.
+Nova includes an MCP server for AI-assisted deploys. No global install needed. The MCP server reads wallet keys from `~/.config/filecoin-nova/credentials` (set up with `nova config`) or from environment variables.
 
 ### Claude Code
 
 ```bash
-claude mcp add filecoin-nova \
-  -e NOVA_PIN_KEY=your-filecoin-wallet-key \
-  -e NOVA_ENS_KEY=your-ethereum-wallet-key \
-  -- npx -y --package filecoin-nova nova-mcp
+claude mcp add filecoin-nova -- npx -y --package filecoin-nova nova-mcp
 ```
 
 ### Claude Desktop
 
-Settings > MCP > Add MCP Server. Set command to `npx`, args to `-y --package filecoin-nova nova-mcp`, and add your wallet keys as environment variables.
+Settings > MCP > Add MCP Server. Set command to `npx`, args to `-y --package filecoin-nova nova-mcp`.
 
 ### Cursor / Windsurf / VS Code
 
@@ -148,11 +158,7 @@ Add to your MCP config file:
   "mcpServers": {
     "filecoin-nova": {
       "command": "npx",
-      "args": ["-y", "--package", "filecoin-nova", "nova-mcp"],
-      "env": {
-        "NOVA_PIN_KEY": "your-filecoin-wallet-key",
-        "NOVA_ENS_KEY": "your-ethereum-wallet-key"
-      }
+      "args": ["-y", "--package", "filecoin-nova", "nova-mcp"]
     }
   }
 }
