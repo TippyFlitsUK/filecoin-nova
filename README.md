@@ -83,11 +83,12 @@ nova config
 
 ## Configuration
 
-Nova reads configuration from three sources (in order of priority):
+Configuration can come from any of these sources (in order of priority):
 
 1. **CLI flags** (`--ens`, `--rpc-url`, etc.)
-2. **Environment variables** (`NOVA_PIN_KEY`, `NOVA_ENS_KEY`, etc.)
-3. **Credentials file** (`~/.config/filecoin-nova/credentials`)
+2. **Environment variables**
+3. **Credentials file** (`~/.config/filecoin-nova/credentials`, set up with `nova config`)
+4. **Interactive prompts** (if running in a terminal)
 
 | Variable | Purpose |
 |----------|---------|
