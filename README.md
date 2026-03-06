@@ -69,15 +69,15 @@ A **CID** (Content Identifier) is a unique fingerprint for your site's content o
 | `nova status --ens <name>` | Check what an ENS domain currently points to |
 | `nova config` | Save your wallet keys and defaults so you don't have to enter them each time |
 
-**Options** available on all commands:
+**Options:**
 
-| Flag | What it does |
-|------|-------------|
-| `--ens <name>` | ENS domain (e.g. `mysite.eth`) |
-| `--rpc-url <url>` | Custom Ethereum RPC |
-| `--provider-id <id>` | Storage provider ID |
-| `--calibration` | Use testnet instead of mainnet |
-| `--json` | Machine-readable JSON output (for CI/scripts) |
+| Flag | Commands | What it does |
+|------|----------|-------------|
+| `--ens <name>` | deploy, ens, status | ENS domain (e.g. `mysite.eth`) |
+| `--rpc-url <url>` | deploy, ens, status | Custom Ethereum RPC |
+| `--provider-id <id>` | deploy | Storage provider ID |
+| `--calibration` | deploy | Use testnet instead of mainnet |
+| `--json` | deploy, ens, status | Machine-readable JSON output (for CI/scripts) |
 
 ---
 
