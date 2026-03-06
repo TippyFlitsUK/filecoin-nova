@@ -2,7 +2,7 @@
 
 Put your website on [Filecoin Onchain Cloud](https://filecoin.cloud) in one command. Optionally give it an ENS domain so anyone can visit it at `yoursite.eth.limo`.
 
-Your site is stored permanently on the Filecoin network — no traditional hosting, no servers to manage.
+Your site is stored onchain on the Filecoin network — no traditional hosting, no servers to manage.
 
 ## Install
 
@@ -159,7 +159,7 @@ This gives your AI assistant three tools:
 
 ## How It Works
 
-1. Nova uploads your site to [Filecoin Onchain Cloud](https://filecoin.cloud) using [filecoin-pin](https://www.npmjs.com/package/filecoin-pin), which stores it on the Filecoin network and makes it available via IPFS
+1. Nova uploads your site to [Filecoin Onchain Cloud](https://filecoin.cloud) using [filecoin-pin](https://www.npmjs.com/package/filecoin-pin), making it available via IPFS
 2. If you specified an ENS domain, Nova updates its contenthash to point to your site's IPFS CID
 3. Anyone can access your site through an IPFS gateway or via `yourname.eth.limo`
 
