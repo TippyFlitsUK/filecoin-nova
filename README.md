@@ -118,26 +118,17 @@ nova status --ens mysite.eth --json
 
 ## MCP Server
 
-Nova includes an MCP server for AI-assisted deploys. No global install needed - just paste the config.
+Nova includes an MCP server for AI-assisted deploys. No global install needed.
 
-**Claude Desktop** - add to `claude_desktop_config.json`:
+**Claude Code:**
 
-```json
-{
-  "mcpServers": {
-    "filecoin-nova": {
-      "command": "npx",
-      "args": ["-y", "--package", "@filoz/filecoin-nova", "nova-mcp"],
-      "env": {
-        "NOVA_PIN_KEY": "your-filecoin-wallet-key",
-        "NOVA_ENS_KEY": "your-ethereum-wallet-key"
-      }
-    }
-  }
-}
+```bash
+claude mcp add filecoin-nova -- npx -y --package @filoz/filecoin-nova nova-mcp
 ```
 
-**Claude Code** - add to `~/.claude.json`:
+Then set your wallet keys as environment variables (`NOVA_PIN_KEY`, `NOVA_ENS_KEY`).
+
+**Claude Desktop** - add to `claude_desktop_config.json`:
 
 ```json
 {
