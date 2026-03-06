@@ -466,6 +466,12 @@ async function runEns(args: string[]) {
 }
 
 async function runConfig() {
+  if (!process.stdin.isTTY) {
+    fail("'nova config' requires an interactive terminal.");
+    info("In CI, use environment variables (NOVA_PIN_KEY, NOVA_ENS_KEY, etc.).");
+    earlyExit(1, "'nova config' requires an interactive terminal.");
+  }
+
   const creds = readCredentials();
 
   console.log("");
