@@ -125,7 +125,7 @@ nova config
 ### Claude Code
 
 ```bash
-claude mcp add filecoin-nova -- npx -y --package filecoin-nova nova-mcp
+claude mcp add filecoin-nova -s user -- npx -y --package filecoin-nova nova-mcp
 ```
 
 ### Claude Desktop
