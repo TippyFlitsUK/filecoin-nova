@@ -16,30 +16,22 @@ function stripAnsi(str: string): string {
 }
 
 /**
- * Redirect console.log/error during tool execution.
- * - stdout is reserved for MCP JSON-RPC, so console.log is redirected to stderr
- * - sends notifications/progress if client provided a progressToken
- * - sends notifications/message (logging) for clients that support it
- * - writes to stderr for clients that capture it
+ * Redirect console.log/error to stderr during tool execution.
+ * stdout is reserved for MCP JSON-RPC framing.
  */
-function withProgress<T>(
-  fn: () => Promise<T>
-): Promise<T> {
+function redirectConsole<T>(fn: () => Promise<T>): Promise<T> {
   const origLog = console.log;
   const origErr = console.error;
 
-  const sendUpdate = (msg: string) => {
-    process.stderr.write(msg + "\n");
-    server.sendLoggingMessage({ level: "info", data: msg }).catch(() => {});
-  };
+  const write = (msg: string) => process.stderr.write(msg + "\n");
 
   console.log = (...args: any[]) => {
     const clean = stripAnsi(args.map(String).join(" ")).trim();
-    if (clean) sendUpdate(clean);
+    if (clean) write(clean);
   };
   console.error = (...args: any[]) => {
     const clean = stripAnsi(args.map(String).join(" ")).trim();
-    if (clean) sendUpdate(clean);
+    if (clean) write(clean);
   };
 
   return fn().finally(() => {
@@ -49,8 +41,7 @@ function withProgress<T>(
 }
 
 const server = new McpServer(
-  { name: "filecoin-nova", version: "0.2.9" },
-  { capabilities: { logging: {} } }
+  { name: "filecoin-nova", version: "0.2.10" },
 );
 
 // nova_deploy — Deploy a directory to Filecoin Onchain Cloud
@@ -62,9 +53,12 @@ server.registerTool(
       "Deploy a static website directory to Filecoin Onchain Cloud. " +
       "Optionally update an ENS domain to point to the deployed site. " +
       "Returns the IPFS CID and gateway URL. " +
-      "IMPORTANT: Requires a Filecoin wallet key. Before calling, check that credentials are configured " +
-      "by asking the user if they have run 'nova config' or set NOVA_PIN_KEY env var. " +
-      "If using ENS, NOVA_ENS_KEY is also needed.",
+      "This tool takes about 60 seconds to complete — do not retry if it seems slow. " +
+      "IMPORTANT: Requires a Filecoin wallet key. Before calling this tool, " +
+      "confirm with the user that credentials are configured by running " +
+      "'nova config' (interactive setup) or setting the NOVA_PIN_KEY environment variable. " +
+      "If the user also wants ENS, they need NOVA_ENS_KEY set too. " +
+      "Do NOT call this tool without confirming credentials first.",
     inputSchema: z.object({
       path: z.string().describe("Path to a directory or archive (.zip, .tar.gz, .tgz, .tar) to deploy"),
       ensName: z.string().optional().describe("ENS domain to point to the site (e.g. mysite.eth)"),
@@ -76,14 +70,19 @@ server.registerTool(
     }),
   },
   async (params): Promise<CallToolResult> => {
-    return withProgress(async () => {
+    return redirectConsole(async () => {
       try {
         const config = resolveConfig(process.env);
 
         const pinKey = params.pinKey || config.pinKey;
-        if (pinKey) {
-          process.env.NOVA_PIN_KEY = pinKey;
+        if (!pinKey) {
+          return {
+            isError: true,
+            content: [{ type: "text" as const, text: "No Filecoin wallet key found. The user needs to run 'nova config' to save their keys, or set the NOVA_PIN_KEY environment variable." }],
+          };
         }
+
+        process.env.NOVA_PIN_KEY = pinKey;
 
         const result = await deploy({
           path: params.path,
@@ -125,8 +124,9 @@ server.registerTool(
     description:
       "Update an ENS domain's contenthash to point to an IPFS CID. " +
       "Requires an Ethereum wallet with ETH for gas. " +
-      "IMPORTANT: Before calling, check that credentials are configured " +
-      "by asking the user if they have run 'nova config' or set NOVA_ENS_KEY env var.",
+      "IMPORTANT: Before calling this tool, confirm with the user that credentials are configured " +
+      "by running 'nova config' (interactive setup) or setting the NOVA_ENS_KEY environment variable. " +
+      "Do NOT call this tool without confirming credentials first.",
     inputSchema: z.object({
       cid: z.string().describe("IPFS CID to point the ENS domain to"),
       ensName: z.string().describe("ENS domain (e.g. mysite.eth)"),
@@ -135,7 +135,7 @@ server.registerTool(
     }),
   },
   async (params): Promise<CallToolResult> => {
-    return withProgress(async () => {
+    return redirectConsole(async () => {
       try {
         const config = resolveConfig(process.env);
         const ensKey = params.ensKey || config.ensKey;
@@ -143,7 +143,7 @@ server.registerTool(
         if (!ensKey) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: "Ethereum wallet key required. Run 'nova config' to save your keys, or set NOVA_ENS_KEY env var." }],
+            content: [{ type: "text" as const, text: "No Ethereum wallet key found. The user needs to run 'nova config' to save their keys, or set the NOVA_ENS_KEY environment variable." }],
           };
         }
 
@@ -191,14 +191,15 @@ server.registerTool(
     title: "Check ENS Status",
     description:
       "Check the current ENS contenthash for a domain. " +
-      "Returns the contenthash and eth.limo URL if set.",
+      "Returns the contenthash and eth.limo URL if set. " +
+      "No credentials needed for this read-only check.",
     inputSchema: z.object({
       ensName: z.string().describe("ENS domain to check (e.g. mysite.eth)"),
       rpcUrl: z.string().optional().describe("Ethereum RPC URL (override default)"),
     }),
   },
   async (params): Promise<CallToolResult> => {
-    return withProgress(async () => {
+    return redirectConsole(async () => {
       try {
         if (!params.ensName.endsWith(".eth")) {
           return {
