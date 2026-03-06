@@ -20,16 +20,6 @@ npm install -g filecoin-nova
 | An Ethereum wallet with ETH | Pays gas for ENS updates (optional) | Any Ethereum wallet |
 | An ENS domain (optional) | Gives your site a human-readable name | Register at [app.ens.domains](https://app.ens.domains) |
 
-## Set Up Your Keys
-
-Save your wallet keys once so you don't have to enter them each time:
-
-```bash
-nova config
-```
-
-This stores your credentials in `~/.config/filecoin-nova/credentials` with owner-only permissions (mode 600). You can also set environment variables instead - they take priority over the config file.
-
 ## Deploy Your Site
 
 The simplest way - Nova will walk you through everything:
