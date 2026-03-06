@@ -1,6 +1,8 @@
 # Nova
 
-Deploy static websites to [Filecoin Onchain Cloud](https://filecoin.io) with optional ENS domain resolution.
+Put your website on [Filecoin Onchain Cloud](https://filecoin.cloud) in one command. Optionally give it an ENS domain so anyone can visit it at `yoursite.eth.limo`.
+
+Your site is stored permanently on the Filecoin network — no traditional hosting, no servers to manage.
 
 ## Install
 
@@ -8,78 +10,165 @@ Deploy static websites to [Filecoin Onchain Cloud](https://filecoin.io) with opt
 npm install -g @filoz/filecoin-nova
 ```
 
-## Quick Start
+## What You Need
+
+| What | Why | How to get it |
+|------|-----|---------------|
+| A Filecoin wallet with USDFC | Pays for storage on Filecoin | Bridge USDC at [app.filecoin.io/bridge](https://app.filecoin.io/bridge) |
+| An Ethereum wallet with ETH | Pays gas for ENS updates (optional) | Any Ethereum wallet |
+| An ENS domain (optional) | Gives your site a human-readable name | Register at [app.ens.domains](https://app.ens.domains) |
+
+## Deploy Your Site
+
+The simplest way — Nova will walk you through everything:
+
+```bash
+nova deploy
+```
+
+Or specify everything upfront:
+
+```bash
+export NOVA_PIN_KEY=your-filecoin-wallet-private-key
+nova deploy ./public --ens mysite.eth
+```
+
+Nova accepts directories or archives (`.zip`, `.tar.gz`, `.tgz`, `.tar`).
+
+When it's done, your site is live at:
+- `https://mysite.eth.limo` (if you used ENS)
+- `https://<cid>.ipfs.dweb.link` (always available via IPFS gateway)
+
+## Commands
+
+### `nova deploy [path]`
+
+Deploy a website to Filecoin Onchain Cloud.
 
 ```bash
 # Deploy a directory
-nova deploy ./public --ens mysite.eth
+nova deploy ./public
+
+# Deploy with an ENS domain
+nova deploy ./dist --ens mysite.eth
 
 # Deploy an archive
-nova deploy site.zip --ens mysite.eth
+nova deploy site.zip
+```
 
-# Point ENS to an existing CID (no deploy)
+### `nova ens <cid> --ens <name>`
+
+Point an ENS domain to an existing IPFS CID (without deploying).
+
+```bash
 nova ens bafybei... --ens mysite.eth
+```
 
-# Deploy with prompts
-nova deploy
+### `nova status --ens <name>`
 
-# Check ENS status
+Check what an ENS domain currently points to.
+
+```bash
 nova status --ens mysite.eth
+```
 
-# JSON output for CI/scripts
+## Configuration
+
+Set these environment variables so you don't have to enter them each time:
+
+```bash
+export NOVA_PIN_KEY=your-filecoin-wallet-private-key
+export NOVA_ENS_KEY=your-ethereum-wallet-private-key  # only if using ENS
+export NOVA_ENS_NAME=mysite.eth                       # default ENS domain
+```
+
+All variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `NOVA_PIN_KEY` | Filecoin wallet key — used to pay for storage |
+| `NOVA_ENS_KEY` | Ethereum wallet key — used to update your ENS domain |
+| `NOVA_ENS_NAME` | Default ENS domain (so you don't need `--ens` every time) |
+| `NOVA_RPC_URL` | Custom Ethereum RPC (Nova uses public RPCs by default) |
+| `NOVA_PROVIDER_ID` | Specific storage provider ID |
+
+## Options
+
+| Flag | What it does |
+|------|-------------|
+| `--ens <name>` | ENS domain to point to your site |
+| `--rpc-url <url>` | Ethereum RPC URL |
+| `--provider-id <id>` | Storage provider ID |
+| `--calibration` | Use testnet instead of mainnet |
+| `--json` | Machine-readable JSON output (for CI/scripts) |
+
+## CI / GitHub Actions
+
+Use `--json` for clean machine-readable output:
+
+```bash
 nova deploy ./dist --json
+# {"cid":"bafybei...","directory":"./dist","gatewayUrl":"https://bafybei....ipfs.dweb.link"}
+
 nova status --ens mysite.eth --json
+# {"ensName":"mysite.eth","contenthash":"...","url":"https://mysite.eth.limo"}
 ```
 
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `NOVA_PIN_KEY` | Filecoin wallet private key (for deploying to FOC) |
-| `NOVA_ENS_KEY` | Ethereum wallet private key (for ENS updates) |
-| `NOVA_ENS_NAME` | ENS domain (e.g. `mysite.eth`) |
-| `NOVA_RPC_URL` | Ethereum RPC URL (override default RPCs) |
-| `NOVA_PROVIDER_ID` | Storage provider ID |
-
-## CLI Options
-
-```
-nova deploy [path] [options]        Deploy a directory or archive
-nova ens <cid> --ens <name>         Point ENS domain to an IPFS CID
-nova status [--ens <name>]          Check ENS contenthash
-nova help                           Show help
-nova --version                      Show version
-
-Options:
-  --ens <name>          ENS domain (e.g. mysite.eth)
-  --rpc-url <url>       Ethereum RPC URL
-  --provider-id <id>    Storage provider ID
-  --calibration         Use calibration testnet (default: mainnet)
-  --json                Output result as JSON (for CI/scripts)
-
-Supported formats: directories, .zip, .tar.gz, .tgz, .tar
-```
-
-## Library Usage
+## Use as a Library
 
 ```typescript
 import { deploy } from "@filoz/filecoin-nova";
 
 const result = await deploy({
-  directory: "./public",
+  path: "./public",
   ensName: "mysite.eth",
   ensKey: process.env.NOVA_ENS_KEY,
 });
 
-console.log(result.cid);        // IPFS CID
+console.log(result.cid);        // bafybei...
 console.log(result.ethLimoUrl);  // https://mysite.eth.limo
 ```
 
+## MCP Server
+
+Nova includes an MCP server for AI-assisted deploys from Claude Desktop, Cursor, and other MCP clients.
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "filecoin-nova": {
+      "command": "nova-mcp",
+      "env": {
+        "NOVA_PIN_KEY": "your-filecoin-wallet-key",
+        "NOVA_ENS_KEY": "your-ethereum-wallet-key"
+      }
+    }
+  }
+}
+```
+
+This gives your AI assistant three tools:
+
+| Tool | What it does |
+|------|-------------|
+| `nova_deploy` | Deploy a website to Filecoin, optionally update ENS |
+| `nova_ens` | Point an ENS domain to an IPFS CID |
+| `nova_status` | Check what an ENS domain points to |
+
+## How It Works
+
+1. Nova uploads your site to [Filecoin Onchain Cloud](https://filecoin.cloud) using [filecoin-pin](https://www.npmjs.com/package/filecoin-pin), which stores it on the Filecoin network and makes it available via IPFS
+2. If you specified an ENS domain, Nova updates its contenthash to point to your site's IPFS CID
+3. Anyone can access your site through an IPFS gateway or via `yourname.eth.limo`
+
+Storage costs are paid in USDFC (a stablecoin on Filecoin). A typical website costs well under 0.10 USDFC/month.
+
 ## Requirements
 
-- Node.js >= 20.10.0
-- [filecoin-pin](https://www.npmjs.com/package/filecoin-pin) >= 0.17.0 (installed automatically)
-- USDFC for Filecoin storage costs
+- Node.js 20.10 or later
+- USDFC for storage costs
 - ETH for ENS gas fees (only if using ENS)
 
 ## License

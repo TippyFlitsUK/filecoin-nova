@@ -1,5 +1,6 @@
 import { ethers, TransactionResponse, TransactionReceipt, Network, FallbackProvider } from "ethers";
 import { CID } from "multiformats/cid";
+import { c, gutterTop, gutterBottom } from "./ui.js";
 
 const TX_TIMEOUT_MS = 120_000; // 2 minutes
 const TX_POLL_MS = 5_000; // poll every 5s
@@ -64,8 +65,6 @@ const ENS_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const NAME_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 // ENS public resolver v2
 const PUBLIC_RESOLVER = "0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63";
-
-import { c, gutterTop, gutterBottom } from "./ui.js";
 
 const DEFAULT_RPC_URLS = [
   "https://ethereum.publicnode.com",     // Allnodes — major validator/infra company

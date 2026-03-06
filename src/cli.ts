@@ -1,25 +1,20 @@
 #!/usr/bin/env node
 
 import { existsSync, statSync, readdirSync, lstatSync } from "node:fs";
-import { resolve, join, basename } from "node:path";
+import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
 import { deploy } from "./deploy.js";
 import { getEnsContenthash, updateEnsContenthash } from "./ens.js";
-import {
-  installFilecoinPin,
-  setupFilecoinPinPayments,
-  isFilecoinPinInstalled,
-} from "./pin.js";
-import { isArchive, extractArchive, cleanupExtracted } from "./archive.js";
+import { setupFilecoinPinPayments } from "./pin.js";
 import { resolveConfig } from "./config.js";
 import { ask, close } from "./prompt.js";
 import { c, fail, info, label, promptLabel, banner, success } from "./ui.js";
 
 // Sentinel error for early exits — skips the error print in main().catch()
 class ExitError extends Error {
-  constructor(public exitCode: number) {
-    super("");
+  constructor(public exitCode: number, message?: string) {
+    super(message || "");
   }
 }
 
@@ -37,8 +32,8 @@ function unmuteConsole() {
   console.error = originalError;
 }
 
-function earlyExit(code: number): never {
-  throw new ExitError(code);
+function earlyExit(code: number, message?: string): never {
+  throw new ExitError(code, message);
 }
 
 const HELP = `
@@ -84,7 +79,6 @@ const HELP = `
 function dirSize(dir: string, seen = new Set<number>()): number {
   let total = 0;
   try {
-    // Track inodes to avoid circular symlinks
     const dirStat = lstatSync(dir);
     if (seen.has(dirStat.ino)) return 0;
     seen.add(dirStat.ino);
@@ -112,6 +106,19 @@ function humanSize(bytes: number): { size: string; unit: string } {
   if (bytes < 1024 ** 2) return { size: (bytes / 1024).toFixed(1), unit: "KiB" };
   if (bytes < 1024 ** 3) return { size: (bytes / 1024 ** 2).toFixed(1), unit: "MiB" };
   return { size: (bytes / 1024 ** 3).toFixed(2), unit: "GiB" };
+}
+
+/**
+ * Resolve a user-provided path: expand ~, make absolute.
+ */
+function resolvePath(input: string): string {
+  let p = input;
+  if (p === "~") {
+    p = homedir();
+  } else if (p.startsWith("~/")) {
+    p = join(homedir(), p.slice(2));
+  }
+  return resolve(p);
 }
 
 async function runDeploy(args: string[]) {
@@ -142,19 +149,12 @@ async function runDeploy(args: string[]) {
   let directory: string | undefined = pos[0];
   let ensName = values.ens || config.ensName;
 
-  // 1. Check filecoin-pin
-  const fpVersion = await isFilecoinPinInstalled();
-  if (!fpVersion) {
-    info("Installing filecoin-pin (first time only)...");
-    await installFilecoinPin();
-  }
-
-  // 2. Filecoin wallet key
+  // 1. Filecoin wallet key
   if (!config.pinKey) {
     if (!process.stdin.isTTY) {
       fail("NOVA_PIN_KEY env var is required.");
       info("Set it to your Filecoin wallet private key (needs USDFC).");
-      earlyExit(1);
+      earlyExit(1, "NOVA_PIN_KEY env var is required.");
     }
     console.log("");
     info("NOVA_PIN_KEY not set — your Filecoin wallet key for");
@@ -164,7 +164,7 @@ async function runDeploy(args: string[]) {
     if (!key) {
       fail("Cannot deploy without a Filecoin wallet key.");
       info("Set NOVA_PIN_KEY env var and try again.");
-      earlyExit(1);
+      earlyExit(1, "Cannot deploy without a Filecoin wallet key.");
     }
     process.env.NOVA_PIN_KEY = key;
     config.pinKey = key;
@@ -174,7 +174,7 @@ async function runDeploy(args: string[]) {
     await setupFilecoinPinPayments(!values.calibration);
   }
 
-  // 3. Directory
+  // 2. Directory or archive
   if (!directory) {
     console.log("");
     const defaultDir = existsSync("./public") ? "./public" : ".";
@@ -182,7 +182,7 @@ async function runDeploy(args: string[]) {
     directory = input || defaultDir;
   }
 
-  // 4. ENS name (optional — skip to deploy without ENS)
+  // 3. ENS name (optional — skip to deploy without ENS)
   if (!ensName) {
     console.log("");
     const input = await ask(promptLabel("ENS domain (leave blank to skip):"));
@@ -193,15 +193,15 @@ async function runDeploy(args: string[]) {
   if (ensName && !ensName.endsWith(".eth")) {
     fail(`Invalid ENS domain: ${ensName}`);
     info("ENS domains must end with .eth (e.g. mysite.eth)");
-    earlyExit(1);
+    earlyExit(1, `Invalid ENS domain: ${ensName}`);
   }
 
-  // 5. Ethereum wallet key (only if ENS is being used)
+  // 4. Ethereum wallet key (only if ENS is being used)
   if (ensName && !config.ensKey) {
     if (!process.stdin.isTTY) {
       fail("NOVA_ENS_KEY env var is required for ENS updates.");
       info("Set it to your Ethereum wallet private key (needs ETH for gas).");
-      earlyExit(1);
+      earlyExit(1, "NOVA_ENS_KEY env var is required for ENS updates.");
     }
     console.log("");
     info("NOVA_ENS_KEY not set — your Ethereum wallet key for");
@@ -211,100 +211,74 @@ async function runDeploy(args: string[]) {
     if (!key) {
       fail("Cannot deploy without an Ethereum wallet key.");
       info("Set NOVA_ENS_KEY env var and try again.");
-      earlyExit(1);
+      earlyExit(1, "Cannot deploy without an Ethereum wallet key.");
     }
     process.env.NOVA_ENS_KEY = key;
     config.ensKey = key;
   }
 
-  // Resolve to absolute path (expand ~ to home dir)
-  if (directory === "~") {
-    directory = homedir();
-  } else if (directory.startsWith("~/")) {
-    directory = join(homedir(), directory.slice(2));
-  }
-  directory = resolve(directory);
-  if (!existsSync(directory)) {
-    fail(`Not found: ${directory}`);
-    earlyExit(1);
+  // Validate path exists before showing summary
+  const resolved = resolvePath(directory);
+  if (!existsSync(resolved)) {
+    fail(`Not found: ${resolved}`);
+    earlyExit(1, `Not found: ${resolved}`);
   }
 
-  // If it's an archive, extract to temp dir
-  let extractedDir: string | undefined;
-  let deployDir = directory;
-  if (isArchive(directory)) {
-    info(`Extracting ${basename(directory)}...`);
-    extractedDir = await extractArchive(directory);
-    deployDir = extractedDir;
-  }
+  // Pre-deploy summary (size estimate from the raw input, before archive extraction)
+  const bytes = dirSize(resolved);
+  const { size, unit } = humanSize(bytes);
+  const TIB = 1024 ** 4;
+  const USDFC_PER_TIB = 5;
+  const costPerMonth = (bytes / TIB) * USDFC_PER_TIB;
+  const costStr = costPerMonth < 0.01 ? "< 0.01" : costPerMonth.toFixed(2);
+  const isMainnet = !values.calibration;
+  console.log("");
+  label("Path", resolved);
+  label("Size", `${size} ${unit} — ~${costStr} USDFC/month`);
+  if (ensName) label("ENS", ensName);
+  label("Net", isMainnet ? "mainnet" : "calibration");
 
-  try {
-    // Check for empty directory
-    const bytes = dirSize(deployDir);
-    if (bytes === 0) {
-      fail(extractedDir ? `Archive is empty: ${basename(directory)}` : `Directory is empty: ${directory}`);
-      earlyExit(1);
+  let parsedProviderId = config.providerId;
+  if (values["provider-id"] !== undefined) {
+    const n = Number(values["provider-id"]);
+    if (isNaN(n)) {
+      fail(`Invalid provider ID: ${values["provider-id"]}`);
+      earlyExit(1, `Invalid provider ID: ${values["provider-id"]}`);
     }
+    parsedProviderId = n;
+  }
 
-    // Pre-deploy summary
-    const { size, unit } = humanSize(bytes);
-    const TIB = 1024 ** 4;
-    const USDFC_PER_TIB = 5;
-    const costPerMonth = (bytes / TIB) * USDFC_PER_TIB;
-    const costStr = costPerMonth < 0.01 ? "< 0.01" : costPerMonth.toFixed(2);
-    const isMainnet = !values.calibration;
+  // Confirm before spending money (skip if stdin is not a TTY or --json)
+  if (process.stdin.isTTY && !jsonMode) {
     console.log("");
-    label(extractedDir ? "File" : "Dir", directory);
-    label("Size", `${size} ${unit} — ~${costStr} USDFC/month`);
-    if (ensName) label("ENS", ensName);
-    label("Net", isMainnet ? "mainnet" : "calibration");
-
-    let parsedProviderId = config.providerId;
-    if (values["provider-id"] !== undefined) {
-      const n = Number(values["provider-id"]);
-      if (isNaN(n)) {
-        fail(`Invalid provider ID: ${values["provider-id"]}`);
-        earlyExit(1);
-      }
-      parsedProviderId = n;
+    const confirm = await ask(promptLabel("Deploy? [Y/n]"));
+    if (confirm && confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
+      info("Deploy cancelled.");
+      earlyExit(0);
     }
+  }
 
-    // Confirm before spending money (skip if stdin is not a TTY or --json)
-    if (process.stdin.isTTY && !jsonMode) {
-      console.log("");
-      const confirm = await ask(promptLabel("Deploy? [Y/n]"));
-      if (confirm && confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
-        info("Deploy cancelled.");
-        earlyExit(0);
-      }
-    }
+  close();
 
-    close();
+  const result = await deploy({
+    path: directory,
+    ensName,
+    ensKey: config.ensKey,
+    rpcUrl: values["rpc-url"] || config.rpcUrl,
+    providerId: parsedProviderId,
+    mainnet: isMainnet,
+  });
 
-    const result = await deploy({
-      directory: deployDir,
-      ensName,
-      ensKey: config.ensKey,
-      rpcUrl: values["rpc-url"] || config.rpcUrl,
-      providerId: parsedProviderId,
-      mainnet: isMainnet,
-    });
-
-    if (jsonMode) {
-      unmuteConsole();
-      console.log(JSON.stringify({
-        cid: result.cid,
-        directory: result.directory,
-        gatewayUrl: `https://${result.cid}.ipfs.dweb.link`,
-        ...(result.ensName && { ensName: result.ensName }),
-        ...(result.txHash && { txHash: result.txHash }),
-        ...(result.ethLimoUrl && { ethLimoUrl: result.ethLimoUrl }),
-      }));
-    }
-  } finally {
-    if (extractedDir) {
-      await cleanupExtracted(extractedDir);
-    }
+  if (jsonMode) {
+    unmuteConsole();
+    console.log(JSON.stringify({
+      cid: result.cid,
+      directory: result.directory,
+      gatewayUrl: `https://${result.cid}.ipfs.dweb.link`,
+      ...(result.ensName && { ensName: result.ensName }),
+      ...(result.txHash && { txHash: result.txHash }),
+      ...(result.ethLimoUrl && { ethLimoUrl: result.ethLimoUrl }),
+    }));
   }
 }
 
@@ -334,7 +308,7 @@ async function runStatus(args: string[]) {
     const input = await ask(promptLabel("ENS domain to check:"));
     if (!input) {
       fail("ENS domain required.");
-      earlyExit(1);
+      earlyExit(1, "ENS domain required.");
     }
     ensName = input;
   }
@@ -343,7 +317,7 @@ async function runStatus(args: string[]) {
   if (!ensName.endsWith(".eth")) {
     fail(`Invalid ENS domain: ${ensName}`);
     info("ENS domains must end with .eth (e.g. mysite.eth)");
-    earlyExit(1);
+    earlyExit(1, `Invalid ENS domain: ${ensName}`);
   }
 
   const rpcUrl = values["rpc-url"] || config.rpcUrl;
@@ -397,12 +371,12 @@ async function runEns(args: string[]) {
     if (!process.stdin.isTTY) {
       fail("CID argument required.");
       info("Usage: nova ens <cid> --ens <name>");
-      earlyExit(1);
+      earlyExit(1, "CID argument required.");
     }
     const input = await ask(promptLabel("IPFS CID to point to:"));
     if (!input) {
       fail("CID required.");
-      earlyExit(1);
+      earlyExit(1, "CID required.");
     }
     cid = input;
   }
@@ -412,12 +386,12 @@ async function runEns(args: string[]) {
   if (!ensName) {
     if (!process.stdin.isTTY) {
       fail("--ens flag or NOVA_ENS_NAME env var required.");
-      earlyExit(1);
+      earlyExit(1, "--ens flag or NOVA_ENS_NAME env var required.");
     }
     const input = await ask(promptLabel("ENS domain:"));
     if (!input) {
       fail("ENS domain required.");
-      earlyExit(1);
+      earlyExit(1, "ENS domain required.");
     }
     ensName = input;
   }
@@ -425,7 +399,7 @@ async function runEns(args: string[]) {
   if (!ensName.endsWith(".eth")) {
     fail(`Invalid ENS domain: ${ensName}`);
     info("ENS domains must end with .eth (e.g. mysite.eth)");
-    earlyExit(1);
+    earlyExit(1, `Invalid ENS domain: ${ensName}`);
   }
 
   // Ethereum wallet key
@@ -433,7 +407,7 @@ async function runEns(args: string[]) {
     if (!process.stdin.isTTY) {
       fail("NOVA_ENS_KEY env var is required for ENS updates.");
       info("Set it to your Ethereum wallet private key (needs ETH for gas).");
-      earlyExit(1);
+      earlyExit(1, "NOVA_ENS_KEY env var is required for ENS updates.");
     }
     console.log("");
     info("NOVA_ENS_KEY not set — your Ethereum wallet key for");
@@ -443,7 +417,7 @@ async function runEns(args: string[]) {
     if (!key) {
       fail("Cannot update ENS without an Ethereum wallet key.");
       info("Set NOVA_ENS_KEY env var and try again.");
-      earlyExit(1);
+      earlyExit(1, "Cannot update ENS without an Ethereum wallet key.");
     }
     config.ensKey = key;
   }
@@ -524,9 +498,8 @@ main().catch((err) => {
   if (err instanceof ExitError) {
     if (isJsonMode) {
       unmuteConsole();
-      // ExitError with code 0 is not an error (e.g. cancelled deploy)
       if (err.exitCode !== 0) {
-        console.log(JSON.stringify({ error: "Operation failed" }));
+        console.log(JSON.stringify({ error: err.message || "Operation failed" }));
       }
     }
     process.exit(err.exitCode);

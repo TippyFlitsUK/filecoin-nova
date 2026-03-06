@@ -3,18 +3,16 @@
 ## Overview
 Nova — deploy static sites to Filecoin Onchain Cloud with ENS resolution.
 
-Two packages:
-- `@filoz/filecoin-nova` — CLI engine (pin to FOC, update ENS contenthash, notifications)
-- `@filoz/filecoin-nova-agent` — MCP server (wraps CLI, adds intelligence for agent directories)
+Single package with two entry points:
+- `nova` CLI — interactive deploy, ENS update, status check
+- `nova-mcp` — MCP server (exposes same functionality as tools for Claude Desktop/Cursor)
 
 ## Architecture
 ```
-CLI (engine)                MCP Server (agent, Phase 3)
+CLI (nova)                  MCP Server (nova-mcp)
 nova deploy [path]    <──   nova_deploy tool
 nova ens <cid>        <──   nova_ens tool
 nova status           <──   nova_status tool
-                            nova_diagnose (agent-only)
-                            nova_preview (agent-only)
 ```
 
 ## CLI Commands
@@ -29,7 +27,8 @@ src/deploy.ts    — Orchestrates pin + ENS
 src/ens.ts       — ENS contenthash encoding/updating/reading (ethers v6)
 src/pin.ts       — filecoin-pin subprocess management
 src/archive.ts   — Archive detection and extraction to temp dir
-src/prompt.ts    — Readline wrapper (lazy init, askSecret for masked input)
+src/mcp.ts       — MCP server (nova_deploy, nova_ens, nova_status tools)
+src/prompt.ts    — Readline wrapper (lazy init)
 src/config.ts    — Env var resolution
 src/ui.ts        — Visual design system (colours, gutter, labels)
 ```
@@ -48,9 +47,9 @@ src/ui.ts        — Visual design system (colours, gutter, labels)
 - Env vars: `NOVA_ENS_KEY` (ETH wallet), `NOVA_PIN_KEY` (FIL wallet)
 
 ## Phases
-1. CLI engine: pin + ENS update + verify ✅
+1. CLI engine: pin + ENS update + verify + --json ✅
 2. Notifications: Slack webhook, email, status.json
-3. MCP server: thin wrapper around CLI, listed on Smithery/MCP Registry
+3. MCP server: thin wrapper around CLI ✅
 4. Content on FOC datasets: source content stored on Filecoin
 5. (Optional) Standalone AI agent — see caveats below
 
@@ -86,4 +85,4 @@ can't simplify further. Build based on real feedback, not speculation.
 - ENS updates require mainnet ETH for gas — always confirm before sending tx
 - pnpm commands must run from project dir, not parent ~/claude/
 - Subprocess output may contain ANSI codes — always stripAnsi() before regex parsing
-- Not yet in git — needs initial commit and repo setup
+- Repo: github.com/TippyFlitsUK/filecoin-nova, branch `main`
