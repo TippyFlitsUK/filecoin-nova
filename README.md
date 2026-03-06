@@ -75,7 +75,7 @@ nova status --ens mysite.eth
 
 ### `nova config`
 
-Set up or update your wallet keys and defaults.
+Save your wallet keys and defaults to `~/.config/filecoin-nova/credentials` so you don't have to enter them each time.
 
 ```bash
 nova config
