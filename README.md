@@ -120,7 +120,7 @@ nova status --ens mysite.eth --json
 
 Nova includes an MCP server for AI-assisted deploys. No global install needed.
 
-**Claude Code:**
+### Claude Code
 
 ```bash
 claude mcp add filecoin-nova \
@@ -129,7 +129,19 @@ claude mcp add filecoin-nova \
   -- npx -y --package @filoz/filecoin-nova nova-mcp
 ```
 
-**Claude Desktop** - add to `claude_desktop_config.json`:
+### Claude Desktop
+
+Settings > MCP > Add MCP Server. Set command to `npx`, args to `-y --package @filoz/filecoin-nova nova-mcp`, and add your wallet keys as environment variables.
+
+### Cursor / Windsurf / VS Code
+
+Add to your MCP config file:
+
+| Editor | Config file |
+|--------|------------|
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code | `.vscode/mcp.json` |
 
 ```json
 {
@@ -146,7 +158,7 @@ claude mcp add filecoin-nova \
 }
 ```
 
-This gives your AI assistant three tools:
+### Tools
 
 | Tool | What it does |
 |------|-------------|
